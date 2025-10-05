@@ -37,6 +37,33 @@ use std::{
 
 use crate::{LINE_NUMBER_CACHE, SWASH_CACHE, line_number::LineNumberKey};
 
+// Line highlight fallback configuration
+const LINE_HIGHLIGHT_BLEND_FACTOR: f32 = 0.05;
+
+/// Creates a subtle fallback line highlight color by blending background with foreground
+fn create_fallback_line_highlight(background: cosmic_text::Color, foreground: cosmic_text::Color) -> cosmic_text::Color {
+    let bg_r = ((background.0 >> 16) & 0xFF) as f32 / 255.0;
+    let bg_g = ((background.0 >> 8) & 0xFF) as f32 / 255.0;
+    let bg_b = (background.0 & 0xFF) as f32 / 255.0;
+    let bg_a = ((background.0 >> 24) & 0xFF) as f32 / 255.0;
+    
+    let fg_r = ((foreground.0 >> 16) & 0xFF) as f32 / 255.0;
+    let fg_g = ((foreground.0 >> 8) & 0xFF) as f32 / 255.0;
+    let fg_b = (foreground.0 & 0xFF) as f32 / 255.0;
+    
+    // Blend with a small amount of foreground for subtle visibility
+    let highlight_r = bg_r * (1.0 - LINE_HIGHLIGHT_BLEND_FACTOR) + fg_r * LINE_HIGHLIGHT_BLEND_FACTOR;
+    let highlight_g = bg_g * (1.0 - LINE_HIGHLIGHT_BLEND_FACTOR) + fg_g * LINE_HIGHLIGHT_BLEND_FACTOR;
+    let highlight_b = bg_b * (1.0 - LINE_HIGHLIGHT_BLEND_FACTOR) + fg_b * LINE_HIGHLIGHT_BLEND_FACTOR;
+    
+    cosmic_text::Color::rgba(
+        (highlight_r * 255.0) as u8,
+        (highlight_g * 255.0) as u8,
+        (highlight_b * 255.0) as u8,
+        (bg_a * 255.0) as u8,
+    )
+}
+
 pub struct TextBox<'a, Message> {
     editor: &'a Mutex<ViEditor<'static, 'static>>,
     metrics: Metrics,
@@ -545,11 +572,18 @@ where
                             cosmic_text::Color::rgba(color.r, color.g, color.b, color.a)
                         };
                         let syntax_theme = editor.theme();
-                        //TODO: ideal fallback for line highlight color
+                        
+                        // Use syntax theme's line highlight if available, otherwise create intelligent fallback
                         syntax_theme
                             .settings
                             .line_highlight
-                            .map_or(editor.background_color(), convert_color)
+                            .map_or_else(
+                                || create_fallback_line_highlight(
+                                    editor.background_color(),
+                                    editor.foreground_color()
+                                ),
+                                convert_color
+                            )
                     };
 
                     let cursor = editor.cursor();
