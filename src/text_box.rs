@@ -37,6 +37,12 @@ use std::{
 
 use crate::{LINE_NUMBER_CACHE, SWASH_CACHE, line_number::LineNumberKey};
 
+const SCROLL_LINES_PER_WHEEL_STEP: f32 = 3.0;
+
+const SCROLL_PIXEL_MULTIPLIER: f32 = 1.5;
+
+const AUTO_SCROLL_SPEED_MULTIPLIER: f32 = 8.0;
+
 pub struct TextBox<'a, Message> {
     editor: &'a Mutex<ViEditor<'static, 'static>>,
     metrics: Metrics,
@@ -1150,12 +1156,13 @@ where
                                     y: y as i32,
                                 });
                                 let auto_scroll = editor.with_buffer(|buffer| {
-                                    //TODO: ideal auto scroll speed
-                                    let speed = 10.0;
+                                    // Calculate auto-scroll speed based on distance from buffer edge
                                     if y < 0.0 {
-                                        Some(y * speed)
+                                        // Scrolling upward - speed increases with distance above buffer
+                                        Some(y * AUTO_SCROLL_SPEED_MULTIPLIER)
                                     } else if y > buffer.size().1.unwrap_or(0.0) {
-                                        Some((y - buffer.size().1.unwrap_or(0.0)) * speed)
+                                        // Scrolling downward - speed increases with distance below buffer
+                                        Some((y - buffer.size().1.unwrap_or(0.0)) * AUTO_SCROLL_SPEED_MULTIPLIER)
                                     } else {
                                         None
                                     }
@@ -1209,12 +1216,15 @@ where
                 if let Some(_p) = cursor_position.position_in(layout.bounds()) {
                     let pixels = match delta {
                         ScrollDelta::Lines { x: _, y } => {
-                            //TODO: this adjustment is just a guess!
+                            // Calculate scroll distance based on line height and configured multiplier
                             let metrics = editor.with_buffer(|buffer| buffer.metrics());
-                            -y * metrics.line_height
+                            -y * metrics.line_height * SCROLL_LINES_PER_WHEEL_STEP
                         }
-                        ScrollDelta::Pixels { x: _, y } => -y,
-                    } * 4.0;
+                        ScrollDelta::Pixels { x: _, y } => {
+                            // For pixel-based scrolling, use configured multiplier
+                            -y * SCROLL_PIXEL_MULTIPLIER
+                        }
+                    };
                     editor.action(Action::Scroll { pixels });
                     status = Status::Captured;
                 }
